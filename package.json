@@ -1,0 +1,17 @@
+{
+  "name": "node_recording_server",
+  "version": "1.0.0",
+  "description": "speech recording server for mixidea",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "morninng"
+  ],
+  "author": "yuta moriyama",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.13.4"
+  }
+}
