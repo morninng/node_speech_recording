@@ -1,2 +1,5 @@
  npm install express --save
 
+npm install -g node-inspector
+node-debug index.js
+
