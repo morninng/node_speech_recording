@@ -7,5 +7,6 @@ node_modules/*
 *.key
 *.conf
 public/audio/*
-
-
+AWS_Key.json 
+*~
+logs/*

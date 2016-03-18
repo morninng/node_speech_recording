@@ -1,13 +1,14 @@
 var express = require('express');
 var path = require('path');
 var fs = require('fs');
-//var https = require('https');
-var http = require('http');
+var https = require('https');
+//var http = require('http');
 var wav = require('wav');
 var sox = require('sox');
 var SoxCommand = require('sox-audio');
 var ss = require('socket.io-stream');
 var config = require('./config/mixidea.conf');
+var Firebase = require("firebase");
 
 var log4js = require('log4js');
 log4js.configure({
@@ -38,17 +39,16 @@ var app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'node_modules/socket.io-client/')));
 app.use(express.static(path.join(__dirname, 'node_modules/socket.io-stream/')));
+app.use(express.static(path.join(__dirname, 'logs')));
 
 
 app.get('/', function (req, res) {
   res.send('Hello World!');
 });
-app.get('/chat_test', function (req, res) {
-  res.sendFile(__dirname + '/public/chat_test.html');
-});
 
-//var httpServer = https.createServer(credentials, app);
-var httpServer = http.createServer(app);
+
+var httpServer = https.createServer(credentials, app);
+//var httpServer = http.createServer(app);
 
 var serverPort = 3000;
 var server = httpServer.listen(serverPort, function () {
@@ -59,13 +59,8 @@ var server = httpServer.listen(serverPort, function () {
 
 
 var io = require('socket.io').listen(server);
-io.sockets.setMaxListeners(0);
+io.sockets.setMaxListeners(Infinity);
 
-/*
-io.on('connection', function(socket){
-  console.log('a user connected');
-});
-*/
 
 
 (function(){
@@ -75,24 +70,26 @@ io.on('connection', function(socket){
   var GlobalInfo = new Object();
 
 	self.io_namespace.on('connection', function(socket){
-		console.log("connected");
-		loggerRequest.info('connected');
+
+		console.log("connect socket id=" + socket.id);
+		loggerRequest.info("connect socket id=" + socket.id);
 		socket.setMaxListeners(Infinity);
 
-	  socket.on('disconnect', function(){
-	    console.log('user disconnected');
-			loggerRequest.info('user disconnected');
-	  });
+		socket.on('disconnect', function(){
+			console.log("user disconnected socket id=" + socket.id);
+			loggerRequest.info("user disconnected socket id=" + socket.id);
+		});
 
-	  socket.on('join_room', function(data){
-	  	socket.join(data.room_name);
-	    console.log('user join in the name room: ' + data.room_name + ", socketid is " + socket.id);
+		socket.on('join_room', function(data){
+			socket.join(data.room_name);
+			console.log('user join in the name room: ' + data.room_name + ", socketid is " + socket.id);
 			loggerRequest.info('user join in the name room: ' + data.room_name + ", socketid is " + socket.id);
-	  });
+		});
 
 		ss(socket).on('audio_record_start', function(stream, data){
-			console.log("audio record start " + socket.id);
-			loggerRequest.info("audio record start " + socket.id);
+			console.log("audio record start socket id=" + socket.id);
+			loggerRequest.info("audio record start socket id=" + socket.id);
+			stream.setMaxListeners(Infinity);
 			var outfile_name  = data.filename;
 			outfile_name = outfile_name.replace(/-/g, "");
 			var record_start_time = Date.now();
@@ -100,15 +97,12 @@ io.on('connection', function(socket){
 			loggerRequest.info("audio record start at " + record_start_time + " socketid:" + socket.id);
 
 			var sample_rate = data.sample_rate || 44100;
-		//	eval("GlobalInfo.file_writer_sample_rate_" + outfile_name + " = new Array()");
-		//	eval("GlobalInfo.file_writer_sample_rate_" + outfile_name + "[0]=" + sample_rate);
 			eval("GlobalInfo.file_writer_count_" + outfile_name + "=1");
 			eval("GlobalInfo.record_start_time_" + outfile_name + "=" + record_start_time);
 			var outfile_name_wav  = './public/audio/' + outfile_name + "_1.wav";
 			console.log("output file name is " + outfile_name_wav);
 			loggerRequest.info("output file name is " + outfile_name_wav);
 
-			//var file_writer = new Array();
 			var file_writer = new wav.FileWriter(
 			 outfile_name_wav,
 			 {channels:1,
@@ -123,24 +117,21 @@ io.on('connection', function(socket){
 			loggerRequest.info("audio record resume " + socket.id);
 
 			var outfile_name  = data.filename;
+			outfile_name = outfile_name.replace(/-/g, "");
 			var prev_count = eval("GlobalInfo.file_writer_count_" + outfile_name );
-
 			if(!prev_count){
 				return;
 			}
-
 			var next_count = prev_count + 1;
 			console.log("resume count is " + next_count);
 			loggerRequest.info("resume count is " + next_count);
 			var sample_rate = data.sample_rate || 44100;
 
 			eval("GlobalInfo.file_writer_count_" + outfile_name + "=next_count");
-//			eval("GlobalInfo.file_writer_sample_rate" + outfile_name + "[" + next_count +"]=" + sample_rate);
 			var outfile_name_wav  = './public/audio/' +  outfile_name + "_" + String(next_count)  + ".wav";
 			console.log("output file name is " + outfile_name_wav);
 			loggerRequest.info("output file name is " + outfile_name_wav);
 
-		//	var file_writer = socket.file_writer || new Array();
 			var file_writer = new wav.FileWriter(
 				 outfile_name_wav, 
 				 {channels:1,
@@ -151,77 +142,71 @@ io.on('connection', function(socket){
 
 		});
 
+/*
+		socket.on('test', function(data){
+			console.log("test" +  data);
+			console.log(socket.id);
+		});
+
+		ss(socket).on('profile-image', function(stream, data) {
+			var filename = path.basename(data.name);
+			 console.log(socket.id);
+			console.log("profile image recieve " + filename);
+			stream.pipe(fs.createWriteStream(filename));
+		});
+*/
+
+
 		socket.on('audio_record_suspend', function(data){
 			console.log("audio suspend " + socket.id);
 			loggerRequest.info("audio suspend " + socket.id);
-	//		if(socket.file_writer){
-			//  socket.file_writer.end();
-			//  socket.file_writer = null;
-		//	}
 		});
 
 		socket.on('audio_record_end', function(data){
-			console.log("audio recording end " + socket.id);
+			console.log("audio record end socket id=" + socket.id);
 			loggerRequest.info("audio recording end " + socket.id);
 			var outfile_name  = data.filename;
+			outfile_name = outfile_name.replace(/-/g, "");
 			var role_name  = data.role_name;
-			var speech_transcript_id  = data.speech_transcript_id;
 			var room_name = data.room_name;
+			var speech_id_val = data.speech_id;
 			console.log("file name is " + outfile_name);
 			loggerRequest.info("file name is " + outfile_name);
 			console.log("role name is " + role_name);
 			loggerRequest.info("role name is " + role_name);
-			console.log(" speech transcription id is " + speech_transcript_id);
-			loggerRequest.info(" speech transcription id is " + speech_transcript_id);
 
-//			if(!socket.file_writer){
-//				return;
-//			}else{
+			var record_start_time = eval("GlobalInfo.record_start_time_" + outfile_name);
+			var audio_record_end_time = Date.now();
+			var record_duration = audio_record_end_time - record_start_time;
+			var count = eval("GlobalInfo.file_writer_count_" + outfile_name );
+			console.log("audio record start " + record_start_time);
+			loggerRequest.info("audio record start " + record_start_time);
+			console.log("audio record end " + audio_record_end_time);
+			loggerRequest.info("audio record end " + audio_record_end_time);
+			console.log("recording duration is " + record_duration + " msec");
+			loggerRequest.info("recording duration is " + record_duration + " msec");
+			console.log("file count is " + count );
+			loggerRequest.info("file count is " + count );
+			eval(" delete GlobalInfo.file_writer_count_" + outfile_name );
+			eval(" delete GlobalInfo.record_start_time_" + outfile_name );
+			setTimeout(function(){
+				convert_SampleRate_transcode_upload_S3(outfile_name, count,  role_name, room_name, speech_id_val);
 
-
-			  var record_start_time = eval("GlobalInfo.record_start_time_" + outfile_name);
-			  var audio_record_end_time = Date.now();
-				var record_duration = audio_record_end_time - record_start_time;
-				var count = eval("GlobalInfo.file_writer_count_" + outfile_name );
-				console.log("audio record start " + record_start_time);
-				loggerRequest.info("audio record start " + record_start_time);
-				console.log("audio record end " + audio_record_end_time);
-				loggerRequest.info("audio record end " + audio_record_end_time);
-				console.log("recording duration is " + record_duration + " msec");
-				loggerRequest.info("recording duration is " + record_duration + " msec");
-				console.log("file count is " + count );
-				loggerRequest.info("file count is " + count );
-				eval(" delete GlobalInfo.file_writer_count_" + outfile_name );
-				eval(" delete GlobalInfo.record_start_time_" + outfile_name );
-				//setTimeout("GlobalInfo.record_end_action(outfile_name, count)", record_duration);
-				setTimeout(function(){
-					convert_SampleRate_transcode_upload_S3(outfile_name, count, speech_transcript_id, role_name, room_name);
-			//		transcode_file_upload_s3_command(outfile_name, count, speech_transcript_id, role_name, room_name);
-	
-			//		eval(" delete GlobalInfo.file_writer_sample_rate_" + outfile_name );
-				}, record_duration);
-			//  socket.file_writer.end();
-			//  socket.file_writer = null;
-//			}
+			}, record_duration);
 		});
 	});
 
 
-var convert_SampleRate_transcode_upload_S3 = function(outfile_name, count, speech_transcript_id, role_name , room_name)
+var convert_SampleRate_transcode_upload_S3 = function(outfile_name, count, role_name , room_name, speech_id_val)
 {
 	console.log("convert_SampleRate_transcode_upload_S3 start");
 	loggerRequest.info("convert_SampleRate_transcode_upload_S3 start");
 	var file_list_len = count;
 	for(var i=0; i< file_list_len; i++){
-//		var existing_file_name = './public/audio/' + outfile_name + "_"+ String(i+1) + '.wav';
-//		console.log(existing_file_name);
-	//	var each_sample_rate = eval("GlobalInfo.file_writer_sample_rate_" + outfile_name + "[" + i +"]");
-	//	if(each_sample_rate != 48000){
 		convert_sample_rate( outfile_name, i);
-	//	}
 	}
 	setTimeout(function(){
-		transcode_file_upload_s3_command(outfile_name, count, speech_transcript_id, role_name, room_name);
+		transcode_file_upload_s3_command(outfile_name, count, role_name, room_name, speech_id_val);
 	}, 10000);
 }
 
@@ -238,14 +223,14 @@ var convert_sample_rate = function( outfile_name, i){
 		loggerRequest.info("changing sample rate succeed:" + dest_file);
 	});
 	command.on('error', function(err, stdout, stderr) {
-		console.log("changing sample rate fail" + err + ":" + file_name);
-		loggerRequest.info("changing sample rate fail" + err + ":" + file_name);
+		console.log("changing sample rate fail" + err + ":" + outfile_name);
+		loggerRequest.info("changing sample rate fail" + err + ":" + outfile_name);
 	});
 	command.run();
 }
 
 
-var transcode_file_upload_s3_command = function(file_name, count, speech_transcript_id, role_name , room_name)
+var transcode_file_upload_s3_command = function(file_name, count,  role_name , room_name, speech_id_val)
 {
   console.log("transcode command is called");
 	loggerRequest.info("transcode command is called");
@@ -274,9 +259,9 @@ var transcode_file_upload_s3_command = function(file_name, count, speech_transcr
 	});
 	 
 	command.on('end', function() {
-	  console.log('transcode and connecting audio succeeded!');
+		console.log('transcode and connecting audio succeeded!');
 		loggerRequest.info('transcode and connecting audio succeeded!');
-	  wstream.end();
+		wstream.end();
 		fs.readFile(dest_file, function (err, data) {
 			s3.putObject(
 				{Key: file_name_on_s3, ContentType: "audio/mp3", Body: data, ACL: "public-read"},
@@ -285,7 +270,7 @@ var transcode_file_upload_s3_command = function(file_name, count, speech_transcr
 						console.log("succeed to save data on S3");
 						loggerRequest.info("succeed to save data on S3");
 
-						save_AudioInfo_onFirebase(file_name_on_s3, speech_transcript_id, role_name, room_name);
+						save_AudioInfo_onFirebase(file_name_on_s3,  role_name, room_name, speech_id_val);
 
 					}else{
 						console.log("fai to save data on S3" + error + data);
@@ -299,13 +284,30 @@ var transcode_file_upload_s3_command = function(file_name, count, speech_transcr
 	command.run();
 }
 
-var save_AudioInfo_onFirebase = function(file_name, speech_transcript_id , role_name, room_name)
+var save_AudioInfo_onFirebase = function(file_name, role_name, room_name, speech_id_val)
 {
 
+	var audio_url = config.S3_audio_url + config.BucketName + "/" + file_name;
+	console.log("audio url: " + audio_url);
+	loggerRequest.info("audio url: " + audio_url);
 	
+
+	var event_id = room_name;
+    var root_ref = new Firebase(config.firebase_url);
+    var child_path = "event_related/audio_transcript/" +event_id + "/" + role_name + "/" + speech_id_val + "/audio";
+    console.log(child_path)
+    var audio_file_ref = root_ref.child(child_path);
+    audio_file_ref.set(audio_url, function(error) {
+		if (error) {
+			console.log("saving file on firabase failed" + error + "event id " + event_id);
+		} else {
+			console.log("saving file on firebase succeedevent id " + event_id);
+		}
+	});
+
+
+
 }
-
-
 
 
 
