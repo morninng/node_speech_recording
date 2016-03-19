@@ -9,6 +9,7 @@ var SoxCommand = require('sox-audio');
 var ss = require('socket.io-stream');
 var config = require('./config/mixidea.conf');
 var Firebase = require("firebase");
+var ogs = require('open-graph-scraper');
 
 var log4js = require('log4js');
 log4js.configure({
@@ -45,6 +46,79 @@ app.use(express.static(path.join(__dirname, 'logs')));
 app.get('/', function (req, res) {
   res.send('Hello World!');
 });
+
+app.get('/set_ogp', function (req, res, next) {
+
+	res.header("Access-Control-Allow-Origin", "*");
+	res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+
+	var url_value = req.query.url;
+	var event_id = req.query.event_id;
+	var url_obj = {url: url_value};
+
+	console.log("set_ogp called: " + url_value);
+	loggerRequest.info("set_ogp called: " + url_value);
+
+    var root_ref = new Firebase(config.firebase_url);
+    var url_share_ref = root_ref.child("url_related/url");
+    var event_url_ref = root_ref.child("event_related/url_link/" + event_id);
+
+    url_share_ref.orderByChild("original_url").equalTo(url_value).once("value", function(snapshot){
+    	var url_id_obj = snapshot.val();
+    	if(url_id_obj){
+    		var url_id = Object.keys(url_id_obj)[0];
+    		var obj = {};
+    		obj[url_id] = true;
+    		event_url_ref.set(obj);
+			console.log(url_id + "existed and registered to game");
+			loggerRequest.info(url_id + "existed and registered to game");
+    		res.send(url_id + "existed and registered to game");
+    	}else{
+			ogs(url_obj, function (err, results) {
+				if(err){
+					console.log("ogp parse error");
+					loggerRequest.info("ogp parse error");
+    				res.send("ogp parse error");
+				}else{
+					var new_obj = results.data;
+					new_obj["original_url"] = url_value;
+					delete_null_properties(new_obj, true);
+					var new_url_ref = url_share_ref.push(new_obj);
+					var url_id = new_url_ref.key();
+					var obj = {};
+					obj[url_id] = true;
+					event_url_ref.update(obj);
+					console.log(url_id + "is created and registered to game");
+					loggerRequest.info(url_id + "is created and registered to game");
+					res.send(url_id + "is created and registered to game");
+				}
+			});
+    	}
+    }, function(error){
+		console.log("url share query error");
+		loggerRequest.info("url share query error");
+		res.send("url share query error");
+
+    })
+
+});
+
+app.use(function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+
+function delete_null_properties(test, recurse) {
+    for (var i in test) {
+        if (test[i] === null || test[i] === undefined) {
+            delete test[i];
+        } else if (recurse && typeof test[i] === 'object') {
+            delete_null_properties(test[i], recurse);
+        }
+    }
+}
+
 
 
 var httpServer = https.createServer(credentials, app);

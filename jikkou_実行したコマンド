@@ -1,10 +1,13 @@
 
 
-sudo rsync -avz -e "ssh -i /home/morninng/.ssh/mixidea_key.pem" --exclude='node_modules/*' --exclude='*.wav' --exclude='*.mp3' --exclude='logs/*' /home/morninng/Angular/node_recording_server ubuntu@ec2-54-152-111-180.compute-1.amazonaws.com:/home/ubuntu/SourceCode
+sudo rsync -avz -e "ssh -i /home/morninng/.ssh/mixidea_key.pem" --exclude='node_modules/*' --exclude='*.wav' --exclude='.git/' --exclude='*.mp3' --exclude='logs/*' /home/morninng/Angular/node_recording_server ubuntu@ec2-54-152-111-180.compute-1.amazonaws.com:/home/ubuntu/SourceCode
 
 
- npm install express --save
+npm install express --save
 
 npm install -g node-inspector
 node-debug index.js
 
+forever start index.js
+
+forever stop 0
